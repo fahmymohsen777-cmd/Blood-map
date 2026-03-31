@@ -85,36 +85,22 @@ export const fetchAndAnalyzeLiveEvents = async (): Promise<LiveEvent[]> => {
   const keywords = '(مجزرة OR غارة OR شهداء OR "قصف جوي" OR مدنيين) AND (غزة OR لبنان OR ايران OR سوريا OR اليمن)';
 
   let newsAttempts = 0;
-  while (newsAttempts < NEWS_KEYS.length) {
-    const apiKey = nextNewsKey();
-    if (!apiKey) break;
-
+  while (newsAttempts < Math.max(NEWS_KEYS.length, 1)) {
     try {
-      const response = await axios.get('https://newsapi.org/v2/everything', {
-        params: {
-          q: keywords,
-          sortBy: 'publishedAt',
-          language: 'ar',
-          apiKey,
-          pageSize: 7,
-        },
-        timeout: 8000,
-      });
+      // Call our Vercel serverless proxy instead of NewsAPI directly
+      // This avoids CORS restrictions on production deployments
+      const response = await axios.get('/api/news', { timeout: 10000 });
       articles = response.data.articles || [];
-      break; // success — stop rotating
+      break; // success
     } catch (err: any) {
       const status = err.response?.status;
-      const code = err.response?.data?.code;
-      console.error(`[NewsAPI] Key #${newsKeyIndex + 1} failed (${status} - ${code})`);
-
-      // Rotate on rate-limit or auth errors only
-      if (status === 429 || status === 401 || code === 'rateLimited' || code === 'apiKeyExhausted') {
-        rotateNewsKey();
-        newsAttempts++;
-      } else {
-        // CORS or network error — no point rotating
+      console.error(`[NewsProxy] Failed (${status})`);
+      if (status === 429) {
+        // all server-side keys exhausted
         break;
       }
+      // network/server error — no point retrying
+      break;
     }
   }
 
